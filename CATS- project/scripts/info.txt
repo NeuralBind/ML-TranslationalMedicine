@@ -1,0 +1,22 @@
+pca maybe to analyse what type of data we have
+
+n clones how many different samples were reduced to have this ( ones with similar regions of the chromosome)
+
+research question needs a specific answer- tech focused
+
+scikit learn 
+
+feature selection by random forest rfe i got :
+487(9), 673(8), 745(5th), 850(6th), 1665(2nd), 1688(7th), 2018(3d), 2185(best on r also), 2214(4th), 2548(10)
+which are:
+
+chr 3 196908262:196937230  :  487
+chr 5 69274433 70345552     :  673
+chr 6 19049822 20716660     :  745
+chr 6 131304839 132036965    :  850
+    12 70574871 71644041    :  1665
+	12 97852156 98629015    :  1688
+	16 67314736 68371045    : 2018
+	17 35076296 35282086    :  2185
+	17 41062669 41447005    : 2214
+	20 194755 763411         : 2548

@@ -1,0 +1,57 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+ 
+
+```{r}
+library('caret')
+library('gbm')
+
+```
+
+
+```{r}
+setwd('D:/Users/Dekstop/VU/Bioinfo- Transltional Medicine/CATS- project/scripts')
+```
+
+
+```{r}
+Labels<- read.delim("labels.txt", header = TRUE, sep = "\t", quote = "\"", dec = ".",
+fill = TRUE, comment.char = "", row.names = "Sample")
+Features <- read.delim("features.txt", header = TRUE, sep = "\t", quote = "\"", dec = ".",
+fill = TRUE, comment.char = "")
+
+head(Features[,1:7])
+```
+
+```{r tRANSPOSE THE DATAFRAME}
+Features<- t(Features)
+
+
+```
+
+```{r MERGE THE DATAFRAME}
+Combo<- merge (Labels, Features, by="row.names")
+row.names(Combo) <- Combo$Row.names
+Combo$Row.names <- NULL
+head(Combo[,1:10])
+```
+
+```{r For classification use rocVarIMP filter to find the best features}
+# filter everything for X all bot not the 1st col
+Filter_perClass<- filterVarImp(Combo[,-1], as.factor(Combo[,1]),nonpara=FALSE)
+
+
+Filter_all <- as.data.frame(apply(Filter_perClass, 1, mean))
+#Filter_all <- Filter_all[order(Filter_all[,1], decreasing = TRUE),]
+
+```
+
+```{r}
+write.csv(Filter_all,"Important_Features.csv", row.names = TRUE,col.names = TRUE)
+
+
+```
+

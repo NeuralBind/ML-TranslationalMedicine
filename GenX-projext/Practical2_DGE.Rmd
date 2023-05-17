@@ -1,0 +1,348 @@
+---
+title: 'Bioinformatics for Translational Medicine: Differential Gene Expression Analysis'
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+## Background
+
+In this practical, you will perform your own differential gene expression analysis on a transcriptomic dataset related to Alzheimer's disease. What differential gene expression is and why it is relevant has been discussed during the lectures, so we will not repeat it here. For this you will use the the R-package 'DESeq2' (Paper: Love, Huber and Anderson, Genome Biology, 2014, <https://genomebiology.biomedcentral.com/articles/10.1186/s13059-014-0550-8>). R is a statistical programming language that is widely used in bioinformatics, and generally in data-science. DESeq2 is one of the most common methods used for differential gene expression (together with edgeR and limma-voom, which we will not discuss here). The idea of the practical is that you perform the analysis in R (we highly recommend using [R-studio](https://rstudio.com/products/rstudio/)), and use this to answer the questions you can also find on Canvas. When you're finished, you can upload your answers as a pdf to Canvas.
+
+We will use a dataset that is described in the following paper: "Huang et al. Intracellular amyloid toxicity induces oxytosis/ferroptosis regulated cell death. Cell Death Dis 11, 828(2020)"
+
+While the extracellular accumulation of amyloid beta (Aβ) in plaques has been well established to be one of the major characteristics of Alzheimer's disease (AD), recent studies have shown that Aβ also accumulates inside neurons. This process was shown to precede the plaque formation and can take place in various subcellular compartments. Although general pathological responses to intracellular Aβ accumulation including synaptic disruption and inflammatory responses have been reported, the exact mechanism remains unclear. In this paper researchers used a nerve cell model for toxic Aβ accumulation. MC65 nerve cells express the fragment of amyloid precursor protein (APP) under the control of a specific promoter. When the promoter is withdrawn, the cells express APP fragment which leads to Aβ accumulation and cells die within 3 days. Huang et al. integrated transcriptomic (mRNA), proteomic (proteins), and metabolomic (metabolites) (multi-omics) data in the absence and presence of intracellular Aβ toxicity and found that it leads to the activation of oxitosis/ferroptosis cell death program.
+
+## Data
+
+Original data: <https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE144194> (GSE144194_MC65_raw_count.xlsx)
+
+In this study RNA was isolated from MC65 nerve cells 2 days after induction (prior to cell death) and RNA-Seq libraries were prepared. Subsequent raw counts data contains all the information about RNA reference sequences, length, annotations and the read counts from 20 different experiments (5 Aβ+; 5 Aβ-; 5 Aβ+ γ-secretase inhibitors+; 5 Aβ- γ-secretase inhibitors+).
+
+In this practical we will look at only the transcriptomic data and identify differentially expressed genes looking only into Aβ+ and Aβ- cell lines without an additional treatment.
+
+## Loading libraries and data
+
+For the DESeq2 analysis and diagnostics we will need to use various R libraries shown below.
+
+```{r, message=FALSE, warning=FALSE}
+library("DESeq2")
+library("tidyverse")
+library("EnhancedVolcano")
+library("ggplot2")
+library("gplots")
+library("org.Hs.eg.db")
+library("clusterProfiler")
+```
+
+### Data Preparation
+
+We've provided you with the following data-tables.
+
+-   **countdata**: For DEseq2 analysis we selected the columns with (1) reference sequences, (2) gene names and (3) raw counts from 5 Aβ+ and 5 Aβ- cell samples.
+-   **coldata**: Contains the information about the columns representing samples from different experiments.
+
+### Load the Data
+
+```{r}
+RawCountsFull <- read.csv("countdata.csv", sep=",", header=TRUE, row.names=1) 
+SampleInfo <- read.csv("coldata.csv", sep=";", header=TRUE, row.names=1)
+```
+
+## Explore and pre-process your data set
+
+After loading a CSV file, the data is now available in two data frames. A data frame is the standard way of storing tabular data in R. You can see all the objects you created in this script in your environment. Next, we need to get an understanding of what the data looks like. If the data frame is small, we can display it by typing its name (RawCountsFull in our case). If the data frame is larger, it can be helpful to inspect a few rows of the data frame without having to look at the rest of it.
+
+#### Some useful functions:
+
+-   head(df) returns the first 6 rows of a data frame by default.
+-   head(df, n) will show the first n rows
+-   summary() shows summary statistics (mean, median, min and max for each numeric columns and class and length information for non-numeric columns)
+-   dim() shows the dimensions of the dataframe
+
+#### Coding exercise (ungraded):
+
+Print
+
+1.  the first 8 rows of the count data (RawCountsFull);
+2.  the entire sample information data (SampleInfo).
+
+```{r}
+### Write your code here (~ 2 lines) ###
+
+
+```
+
+### Create subsets of data frames
+
+In order to run DESeq2 Analysis we should only leave the count data and thus remove the first column containing gene names and create another data frame (genes) to which we transfer this column to use for the data analysis later on.
+
+#### Coding exercise (ungraded):
+
+Check the dimensions of data frame counts after we removed the gene column
+
+```{r}
+counts <- RawCountsFull[, -1]
+genes <- RawCountsFull[, 1, drop=FALSE]
+
+
+### Write your code here (~ 1 line) ###
+
+
+```
+
+#### Coding exercise (ungraded):
+
+Inspect the new data frames (counts, genes) with a function of your choice.
+
+```{r}
+### Write your code here (2 line) ###
+
+
+```
+
+### Barplot of counts per sample
+
+There are often great differences between the counts per sample and it is therefore necessary to check this by simply using a barplot. While we can see differences between the samples in our experiment, the DESeq2 package will correct for this variation automatically, which is why we do not need to correct the data ourselves before. DESeq2 should always be used with untransformed and unnormalized data.
+
+```{r}
+barplot(colSums(counts), las=2)
+```
+
+## DESeq2 package
+
+From this point on we will work with the DESeq2 R package. DESeq2 is mainly used for RNA-seq data (what we are using here) to detect the genes that show different expressions between two conditions. If you want more information on the DESeq2 package and its functions, there is a lot of information available online. For example, check out:
+
+-   <https://bioconductor.org/packages/release/bioc/manuals/DESeq2/man/DESeq2.pdf> (Manual)
+-   <https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html> (Workflow demonstration)
+
+### DESeq data set conversion
+
+The first step involves turning your data into a DESeq Data Set as this is the input other DESeq2 functions will expect to work with. For the creation of this data set you need to specify the count data, the meta data and the experiment design. The count data (countData) is simply the count measurements from your experiment and should only contain integers. The meta data (colData) is needed to give information on which group each sample in your count data belongs to and the row names of this table should match the column names in the count data set. It is also important that the order of the sample names is the same in both tables, so make sure of this before you continue. Finally, you set the experiment design by choosing which columns from the meta data table will be used to group the samples. In this case, we only have one type of condition, "Type", but in more complex experiments a combination of several conditions would also be possible.
+
+```{r}
+# convert count data
+colnames(counts) <- NULL
+dds <- DESeqDataSetFromMatrix(countData = counts,
+                              colData = SampleInfo,
+                              design = ~ Type)
+```
+
+### Pre-filtering your data set
+
+Next, we will pre-filter our DESeq data set by removing any rows (i.e. genes) that in total contain less than 10 counts across all samples. It is not strictly necessary to do that but it will speed up the computation since the data set will be smaller afterwards. It is important to apply the same filtering step to the genes data set as well so the rows still match.
+
+#### Coding exercise (ungraded):
+
+How many genes are left after the filtering step? Find a function that will print the new number of genes below.
+
+```{r}
+# find the low count rows (genes)
+keep <- rowSums(counts(dds)) >= 10 
+# filter data sets 
+dds <- dds[keep, ]
+genes <- genes[keep, , drop=FALSE]
+
+
+### Write your code here (~ 1 line) ###
+
+
+```
+
+### Distribution of counts
+
+It is always a good idea to plot the distribution of your counts using a histogram. If you plot the actual counts though, your histogram will not be very informative (see first plot). This is caused by a few very high counts that are still included in the plot but barely visible because of their low frequency (at the far right end of the x-axis). The first bin of the column contains almost all the counts therefore and a lot of information about the distribution is lost.
+
+It is therefore more helpful to plot the log count (i.e. the frequency of the counts on a logarithmic scale) which can deal with the high count instances and makes the histogram much more informative (see second plot).
+
+```{r}
+hist(counts(dds))
+hist(log(counts(dds)))
+```
+
+### Principal Component Analysis
+
+The principal component analysis (PCA) is another standard visualization that you can use on your data to better understand it. It is especially helpful if you work with high-dimensional data. Each variable (gene) in our data set can be considered a dimension making it difficult to visualize it as you usually can only visualize two dimensions at the same time in a plot. PCA is trying to solve that problem by creating a set of new variables, the principal components, by linear combination of the original variables. The principal components are chosen in a way to maximize the information/variance the first dimensions will contain, thus PCA allows to display the data set in two principal components, which can be plotted, that contain most of the information contained in the data. That is why PCA is considered a dimensionality reduction method. PCA is helpful to identify the samples that are most similar to each other.
+
+If you want to learn more about the basics of PCA, read: - <http://www.sthda.com/english/articles/31-principal-component-methods-in-r-practical-guide/112-pca-principal-component-analysis-essentials/>
+
+```{r}
+# regularized log transformation
+rld <- rlog(dds)
+#plot first two principal components
+plotPCA(rld, intgroup="Type")
+```
+
+## Differential Gene Expression Analysis
+
+Now we will perform the actual differential gene expression (DGE) analysis on our data set. DGE is used to find the genes in our data set that show a significant change in expression (i.e. counts) between two conditions. In our case, we want to use the Ab negative samples as our baseline and then infer which genes show a much lower (downregulation) or much higher (upregulation) count in the Ab treated group. Both trends can be of interest in research as change in any direction can give information on the affect the treatment has on the cells. The DESeq function is used to actually perform DGE while we use the results function to extract the most important outcomes from the DESeq object.
+
+```{r}
+# perform DGE analysis 
+DESeqDataTable <- DESeq(dds) 
+# extract results
+DESeqResults <- results(DESeqDataTable, alpha=0.05, contrast = c("Type", "AB", "no_AB")) 
+DESeqResultsDF <- data.frame(DESeqResults)
+```
+
+The summary of the DGE results (DESeqResults) gives you an overview of how many genes showed a significant up- or downregulation in absolute numbers and in percent. The threshold for significant results (i.e.the p-value) is set by the alpha parameter in the results function (see above).
+
+```{r}
+summary(DESeqResults)
+```
+
+### DESeq2 results data frame
+
+We saved the results also into a data frame to simplify following steps. Take a look at the columns and make sure you understand what they mean before continuing. The column most important for identifying the differentially expressed genes are the fold change and the associated adjusted p-value.
+
+```{r}
+head(DESeqResultsDF)
+```
+
+### Adjusted p-values (padj)
+
+As you can see in the previous results data frame for every gene a p-value (pvalue) and an adjusted p-value (padj) are given with the adjusted p-value always being greater than the unadjusted p-value. The histograms below show the difference in distribution of the unadjusted and adjusted p-values of all genes.
+
+```{r}
+hist(DESeqResultsDF$pvalue, breaks=100, ylim=c(0, 2500), main="Unadjusted p-values", xlab = "p-value")
+hist(DESeqResultsDF$padj, breaks=100, ylim=c(0, 2500), main="Adjusted p-values", xlab = "p-value")
+```
+
+### Find the differentially expressed genes
+
+We will now build our list of differentially expressed genes in our data set. As a limit we set a fold change of more than 0.5 or less than -0.5 and an adjusted p-value of 0.05 or lower. We then add the gene names to the data frame again and order the selected genes by their adjusted p-value. The final list contains 324 genes and is saved as a csv file.
+
+```{r}
+# save fold change and p-values
+FC <- DESeqResultsDF$log2FoldChange
+adjustedPvalue <- DESeqResultsDF$padj
+# find genes that show significant DGE (p-value lower than 0.05 and fold change of higher than 0.5/lower than -0.5) 
+indexSignificant <- which(adjustedPvalue < 0.05 & abs(FC) > 0.5)
+DESeqResultsSignificant <- DESeqResultsDF[indexSignificant, ]
+# add gene names to data frame
+SignifcantFull <- merge(genes, DESeqResultsSignificant, by="row.names")
+# order genes by most significant adjusted p-value
+SignifcantOrdered <- SignifcantFull[order(SignifcantFull$padj),]
+head(SignifcantOrdered)
+
+print(paste0("Number of differentially expressed genes: ", nrow(SignifcantOrdered)))
+# save table of significant genes
+write.csv(SignifcantOrdered, "Differentially_expressed_genes_list.csv")
+```
+
+## Visualization of results
+
+Visualization of the results can always be helpful, especially if you work with high-dimensional data and cannot look through the entire result data frame.
+
+### Dot plots of counts
+
+Using a dot plot for a single gene is a simple way to visualize the difference in counts between differentially expressed genes and those that are not. The plotCounts function allows you to plot the normalized counts of one gene categorized by group (Ab treatment vs. no Ab treatment). We are interested in visualizing the difference between the most significant gene (EGR1, RefSeq: NM_001964), a gene with a high fold change but a less significant p-value (MMP1, RefSeq: NM_002421) and a randomly chosen one with a non-significant p-value (CCDC150, RefSeq: NM_001080539). Be aware of the differences of the y-axis.
+
+#### Coding exercise (ungraded):
+
+We already wrote the code to create a plot of EGR1 counts. Create the same kind of plot for MMP1 and CCDC150.
+
+```{r}
+# plot EGR1 counts
+plotCounts(dds, gene="NM_001964", intgroup=c("Type"))
+
+### Write your code here (2 line) ###
+
+
+```
+
+### MA Plot
+
+In DESeq2, the function plotMA provides a useful overview for an experiment with a two-group comparison, showing log2 fold changes over the mean of normalized counts for all the samples in the DESeqDataSet.
+
+What do we see on the plot?
+
+1.  Each dot is a gene.
+2.  X axis: average expression of a gene over all samples,
+3.  Y axis: the log2 fold change between 2 groups.
+4.  Genes with an adjusted p value below a threshold (here 0.1, the default) are shown in colour.
+5.  Points which fall out of the window are plotted as open triangles pointing either up or down.
+
+This plot demonstrates that only genes with a large average normalized count provide sufficient information to be identified as significant.
+
+We should be aware of DESeq2's shrinkage estimation of log fold changes (LFCs) and why it is important: When count values are too low to allow an accurate estimate of the LFC, the value is "shrunken" towards zero to avoid that these values, which otherwise would be (as you might already guess) large, yield the top-ranked log fold changes.
+
+```{r}
+plotMA(DESeqResults, ylim=c(-2,2))
+```
+
+### Dispersion plot
+
+Plotting the dispersion estimates is another useful diagnostic method. So far we compared gene expression levels between groups (Aβ+ and Aβ-). However, it is also important to know the variability within the group/replicates. We need to know how noisy these groups (Aβ+ for example) of samples are.
+
+Dispersion = BCV \^2 (biological coefficient of variation) If gene's expression differs from replicate to replicate by 20% (BCV=0.2), dispersion is thus 0.2\^2 = 0.04
+
+There is one challenge in variability calculations. RNA-seq experiments have only few replicates in general (5 in our case), because it's expensive to run RNA-seq experiment 100 times. How can we make the estimate of dispersion reliable? DESeq2 Solution: pool information across genes which are expressed at similar level. So we assume that genes of similar average expression strength have similar dispersion.
+
+What do we see on the plot?
+
+1.  Each dot once again represents each gene.
+2.  X axis: expression level, counts
+3.  Y axis: variability
+
+We can see that, if we have a gene that has low expression, it will be located in the upper left side of the plot, because its variability is high, which is intuitive. The variability of genes that have more counts, is thus lower. In other words, there is a lot of noise in a low count (left) region and hence, not so reliable. It's quite easy to by chance get 4 reads instead of 2 and it immediately gives a big change in variability/dispersion.
+
+After taking into account the gene pool, DESeq2 fits a line (red line) and gives us advice that the dots might be actually closer to the red line than they appear. So every black dot is moved towards the red line and their new location is highlighted in blue and those values are the final dispersion values of each gene. In other words, final estimated dispersion values are shrunk according to the gene-wise estimates towards the fitted estimates (red line).
+
+Some genes (blue dots on top of the plot) are not pulled down towards the red line, because they are too far away and artificially making their dispersion values smaller might give us false results. Thus they are flagged as outliers and not shrunk towards the fitted value.
+
+```{r}
+plotDispEsts(DESeqDataTable)
+```
+
+### Volcano plot
+
+The volcano plot is a convenient visualization of a gene's fold change and p-value at the same time. The log2 fold change is plotted on the x-axis while the negative log10 of the p-value is plotted on the y-axis. We choose the same cutoff values as before shown by the black stripped lines in the plot. The more a gene is located at the side of the plot, the higher the fold change. The higher up the data point is shown, the more significant the difference between the groups.
+
+```{r, fig.width=8, fig.height=12}
+EnhancedVolcano(DESeqResults, lab = genes$gene, x = "log2FoldChange", y = "padj",
+                pCutoff = 0.05, FCcutoff = 0.5)
+```
+
+## Advanced Section: Gene Ontology (GO) Analysis
+
+We have conducted gene expression analysis, we have identified significant DE genes and inspected our data in various ways. What do we do now? How can we use this information for our further research? How can we in an unbiased manner investigate which pathways, cellular components or diseases are associated with our DE genes.
+
+One of the easiest ways to do this kind of functional analysis is Gene Ontology (GO) analysis using TOPPGENE Suite: Go to the website <https://toppgene.cchmc.org> and choose the top tool ToppFun.
+
+To make it easily interpretable, it is best to split our data set into up- and downregulated genes and analyze them separately. Inspect the code example below. We select log2FoldChange \> 0, which means that these genes are upregulated.
+
+1.  Open the newly generated csv file
+2.  Copy the column
+3.  Paste the gene names in the field: "Enrichment Gene Set"
+4.  Change the gene symbol type to Uniprot
+5.  Click submit
+
+Once you upload your list of genes, it will show you the genes that were recognized and you will be provided with the Gene IDs. Some genes might not be recognized and thus will not be used for the further analysis.
+
+You also have an option to alter some of the cut-offs. If you are happy with the default statistical calculations, you can click start.
+
+#### Task (ungraded):
+
+```         
+1. Here we give an example how to generate the list of upregulated genes. 
+   Try to do the same with downregulated genes.
+2. Explore the results and identify which molecular functions and biological 
+   processes are associated with up and downregulated genes?
+3. Try to display the chart that TOPPGENE Suite provides and explain what the 
+   blue and red lines mean.
+```
+
+```{r}
+# (1)select upregulated DE genes (2)extract gene names and (3)save as a CSV file.
+GenesUp <- filter(SignifcantOrdered, log2FoldChange > 0)
+GenesUp <- dplyr::select(GenesUp, gene)
+write.csv(GenesUp, "GenesUp.csv")
+
+### Write your code here (~ 3 line) ###
+
+
+
+```

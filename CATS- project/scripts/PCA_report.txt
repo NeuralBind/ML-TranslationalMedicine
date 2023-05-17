@@ -1,0 +1,9 @@
+              precision    recall  f1-score   support
+
+       HER2+       1.00      0.86      0.92         7
+         HR+       0.60      0.86      0.71         7
+  Triple Neg       0.75      0.50      0.60         6
+
+    accuracy                           0.75        20
+   macro avg       0.78      0.74      0.74        20
+weighted avg       0.78      0.75      0.75        20
