@@ -1,7 +1,0 @@
-pca maybe to analyse what type of data we have
-
-n clones how many different samples were reduced to have this ( ones with similar regions of the chromosome)
-
-research question needs a specific answer- tech focused
-
-scikit learn 
