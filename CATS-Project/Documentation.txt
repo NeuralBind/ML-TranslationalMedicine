@@ -1,3 +1,7 @@
+This project has as a goal to train different models with different feature selection methods in order to classify the different subtypes of breast cancer based on Array CGH data
+
+Files:
+
 Scripts with other models : Contain the build and evaluations of other models tried
 
 Top models: Contain our top 2 models which scored almost the same
