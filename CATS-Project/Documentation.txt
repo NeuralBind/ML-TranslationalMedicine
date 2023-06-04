@@ -1,0 +1,16 @@
+Scripts with other models : Contain the build and evaluations of other models that we tried
+
+Top models: Contain our top 2 models which scored almost the same
+
+Top models pkl: contain the pkl files of our 2 best models
+
+Predictions : 2 Predictions in the correct format for both 2 top models
+
+Estimate : file containing an estimation number out of 57 of the model
+
+train_set.py, train_set_validation_call.py : Script that was made to build the Features-Label set used for the training with input the features.txt and labels.txt, for new data the latter is used
+
+run_model.py :  Script used for runing the pkl file model also doing some work based on the csv we provided
+
+
+
